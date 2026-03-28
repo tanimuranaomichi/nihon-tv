@@ -1,0 +1,29 @@
+---
+description: 非推奨（deprecated）の API・構文・ライブラリの書き方を採用しない
+alwaysApply: true
+---
+
+# 非推奨コードの不採用
+
+- 言語・ランタイム・フレームワーク・ライブラリで **deprecated とマークされている API、構文、設定、パターンは新規コードに採用しない**。
+- 既存コードを触るときは、同じファイル内で **可能な範囲で非推奨のまま拡張せず**、周辺の変更と一緒にモダンな API へ置き換える（スコープが大きすぎる場合は別タスクとして切り出してよい）。
+- ドキュメントや型定義に `@deprecated` / `deprecated` が付いているシンボルは **参照・ラップ・再エクスポートを避ける**。
+- 判断に迷うときは、公式ドキュメントの Migration / Deprecation の案内に従う。
+
+## 例
+
+```typescript
+// ❌ 採用しない（例：ライブラリが deprecated としている古いエントリ）
+import { oldThing } from "some-lib/legacy";
+
+// ✅ 推奨される現行の import・API を使う
+import { newThing } from "some-lib";
+```
+
+```typescript
+// ❌ 採用しない（例：DOM の非推奨イベントなど）
+element.attachEvent("onclick", handler);
+
+// ✅ 現行の API
+element.addEventListener("click", handler);
+```
