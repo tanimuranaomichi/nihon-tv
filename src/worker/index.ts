@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { ChatMessage, ChatRequest } from '../shared/chat'
-import { generateGameResponse } from './ai'
+import { generateAdvice, generateGameResponse } from './ai'
 
 type AiBinding = {
   run: (model: string, options: unknown) => Promise<unknown>
@@ -21,7 +21,7 @@ function isChatMessage(value: unknown): value is ChatMessage {
 
   const candidate = value as Record<string, unknown>
   return (
-    (candidate.role === 'user' || candidate.role === 'assistant') &&
+    (candidate.role === 'user' || candidate.role === 'assistant' || candidate.role === 'advice') &&
     typeof candidate.content === 'string'
   )
 }
@@ -77,6 +77,32 @@ app.post('/api/chat', async (c) => {
   } catch (error) {
     console.error(error)
     return c.json({ error: 'AI 応答の生成に失敗しました。' }, 500)
+  }
+})
+
+app.post('/api/advice', async (c) => {
+  let payload: unknown
+
+  try {
+    payload = await c.req.json()
+  } catch {
+    return c.json({ error: 'JSON ボディが不正です。' }, 400)
+  }
+
+  const chatRequest = parseChatRequest(payload)
+  if (!chatRequest) {
+    return c.json(
+      { error: 'messages と completedConditionIds の形式が不正です。' },
+      400,
+    )
+  }
+
+  try {
+    const advice = await generateAdvice(c.env.AI, chatRequest.messages)
+    return c.json({ advice })
+  } catch (error) {
+    console.error(error)
+    return c.json({ error: 'アドバイスの生成に失敗しました。' }, 500)
   }
 })
 

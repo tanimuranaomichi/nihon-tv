@@ -33,3 +33,7 @@ export const ENDING_SAD_COPY =
 export const RESTART_BUTTON_LABEL = 'もう一度遊ぶ'
 
 export const SEND_BUTTON_LABEL = '送信'
+
+export const ASK_BUTTON_LABEL = 'アドバイスを求める'
+
+export const ADVICE_ROLE_LABEL = 'そらジロー'

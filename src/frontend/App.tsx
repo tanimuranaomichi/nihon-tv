@@ -12,9 +12,17 @@ import {
   SEND_BUTTON_LABEL,
   INTRO_PERSONA_2,
   INTRO_PERSONA_3,
+  ASK_BUTTON_LABEL,
+  ADVICE_ROLE_LABEL,
 } from './gameCopy'
-import type { ChatMessage, ChatRequest, ChatResponse } from '../shared/chat'
-import ooshimaVideo from './assets/ooshima.mp4'
+import type {
+  AdviceResponse,
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+} from '../shared/chat'
+import ooshimaVideo from './assets/movie/ooshima.mp4'
+import sorajiro from './assets/img/sorajiro.png'
 
 type Phase = 'intro' | 'chat' | 'ending'
 
@@ -45,6 +53,31 @@ async function postChat(body: ChatRequest): Promise<ChatResponse> {
   return data
 }
 
+async function postAdvice(body: ChatRequest): Promise<AdviceResponse> {
+  const response = await fetch('/api/advice', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  const data = (await response.json().catch(() => null)) as
+    | AdviceResponse
+    | { error?: string }
+    | null
+
+  if (!response.ok || !data || !('advice' in data)) {
+    const message =
+      data && 'error' in data && typeof data.error === 'string'
+        ? data.error
+        : 'アドバイスを取得できませんでした。'
+    throw new Error(message)
+  }
+
+  return data
+}
+
 function mergeCompletedConditionIds(
   previous: string[],
   incoming: string[],
@@ -61,8 +94,12 @@ export default function App() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(INITIAL_ERROR)
+  const [isAdviceVisible, setIsAdviceVisible] = useState(false)
+  const [isAdviceLoading, setIsAdviceLoading] = useState(false)
 
-  const canSend = input.trim().length > 0 && !isLoading && phase === 'chat'
+  const canSend =
+    input.trim().length > 0 && !isLoading && !isAdviceLoading && phase === 'chat'
+  const canAsk = !isLoading && !isAdviceLoading && phase === 'chat'
 
   function startGame() {
     setMessages([])
@@ -70,6 +107,7 @@ export default function App() {
     setInput('')
     setError(INITIAL_ERROR)
     setIsLoading(false)
+    setIsAdviceVisible(false)
     setPhase('chat')
     setMessages([{ role: 'assistant', content: '1+1は？' }])
   }
@@ -91,6 +129,8 @@ export default function App() {
     setIsLoading(true)
 
     try {
+      setIsAdviceVisible(false)
+      
       const response = await postChat({
         messages: nextMessages,
         completedConditionIds,
@@ -105,7 +145,10 @@ export default function App() {
         response.newlyCompletedConditionIds,
       )
 
-      setMessages((currentMessages) => [...currentMessages, assistantMessage])
+      setMessages((currentMessages) => [
+        ...currentMessages.filter((message) => message.role !== 'advice'),
+        assistantMessage,
+      ])
       setCompletedConditionIds(nextCompletedConditionIds)
 
       if (response.didWin) {
@@ -131,6 +174,34 @@ export default function App() {
     setInput('')
     setIsLoading(false)
     setError(INITIAL_ERROR)
+    setIsAdviceVisible(false)
+  }
+
+  async function handleAskAdvice() {
+    setError(INITIAL_ERROR)
+    setIsAdviceVisible(true)
+    const gameMessages = messages.filter((message) => message.role !== 'advice')
+    setMessages(gameMessages)
+    setIsAdviceLoading(true)
+
+    try {
+      const { advice } = await postAdvice({
+        messages: gameMessages,
+        completedConditionIds,
+      })
+      setMessages([
+        ...gameMessages,
+        { role: 'advice', content: advice },
+      ])
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'アドバイスの取得に失敗しました。',
+      )
+    } finally {
+      setIsAdviceLoading(false)
+    }
   }
 
   return (
@@ -171,17 +242,19 @@ export default function App() {
         {phase === 'chat' ? (
           <div className="stack">
             <div className="chat-log" aria-live="polite">
-              {messages.map((message, index) => (
-                <article
-                  key={`${message.role}-${index}`}
-                  className={`message ${message.role}`}
-                >
-                  <p className="message-role">
-                    {message.role === 'assistant' ? 'GM' : 'Player'}
-                  </p>
-                  <p>{message.content}</p>
-                </article>
-              ))}
+              {messages
+                .filter((message) => message.role !== 'advice')
+                .map((message, index) => (
+                  <article
+                    key={`${message.role}-${index}`}
+                    className={`message ${message.role}`}
+                  >
+                    <p className="message-role">
+                      {message.role === 'assistant' ? 'GM' : 'Player'}
+                    </p>
+                    <p>{message.content}</p>
+                  </article>
+                ))}
 
               {isLoading ? (
                 <article className="message assistant pending">
@@ -190,7 +263,30 @@ export default function App() {
                 </article>
               ) : null}
             </div>
-
+            {isAdviceVisible ? (
+              <div className="advice-log">
+                <img className="advice-image" src={sorajiro} alt="そらジロー" />
+                <div className="advice-log-messages">
+                  {isAdviceLoading ? (
+                    <article className="message advice pending">
+                      <p className="message-role">{ADVICE_ROLE_LABEL}</p>
+                      <p>考えています...</p>
+                    </article>
+                  ) : null}
+                  {messages
+                    .filter((message) => message.role === 'advice')
+                    .map((message, index) => (
+                      <article
+                        key={`advice-${index}`}
+                        className="message advice"
+                      >
+                        <p className="message-role">{ADVICE_ROLE_LABEL}</p>
+                        <p>{message.content}</p>
+                      </article>
+                    ))}
+                </div>
+              </div>
+            ) : null}
             <form className="composer" onSubmit={handleSubmit}>
               <label className="sr-only" htmlFor="player-input">
                 プレイヤー入力
@@ -199,7 +295,7 @@ export default function App() {
                 id="player-input"
                 name="player-input"
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="回答を入力"
+                placeholder="あなたはどうする？"
                 rows={3}
                 value={input}
               />
@@ -207,13 +303,25 @@ export default function App() {
                 <p className="meta">
                   達成済み条件: {completedConditionIds.length}
                 </p>
-                <button
-                  className="primary-button"
-                  disabled={!canSend}
-                  type="submit"
-                >
-                  {isLoading ? '送信中...' : SEND_BUTTON_LABEL}
-                </button>
+                <div className="composer-footer-buttons">
+                  <button
+                    className="primary-button"
+                    disabled={!canAsk}
+                    onClick={() => {
+                      void handleAskAdvice()
+                    }}
+                    type="button"
+                  >
+                    {isAdviceLoading ? '生成中...' : ASK_BUTTON_LABEL}
+                  </button>
+                  <button
+                    className="primary-button"
+                    disabled={!canSend}
+                    type="submit"
+                  >
+                    {isLoading ? '送信中...' : SEND_BUTTON_LABEL}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
