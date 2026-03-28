@@ -1,15 +1,16 @@
 import { FormEvent, useState } from 'react'
 import {
   APP_TITLE,
-  ENDING_HAPPY_COPY,
-  ENDING_SAD_COPY,
-  ENDING_HAPPY_TITLE,
-  ENDING_SAD_TITLE,
+  FAILURE_COPY,
+  FAILURE_TITLE,
+  INITIAL_SCENE,
   INTRO_BUTTON_LABEL,
   INTRO_COPY,
   INTRO_PERSONA,
   RESTART_BUTTON_LABEL,
   SEND_BUTTON_LABEL,
+  SUCCESS_COPY,
+  SUCCESS_TITLE,
   INTRO_PERSONA_2,
   INTRO_PERSONA_3,
   ASK_BUTTON_LABEL,
@@ -20,13 +21,23 @@ import type {
   ChatMessage,
   ChatRequest,
   ChatResponse,
+  GameStage,
 } from '../shared/chat'
 import ooshimaVideo from './assets/movie/ooshima.mp4'
 import sorajiro from './assets/img/sorajiro.png'
 
 type Phase = 'intro' | 'chat' | 'ending'
+type EndingKind = 'accessed' | 'timed_out' | null
 
 const INITIAL_ERROR = null
+const TOTAL_LIMIT_MINUTES = 72 * 60
+const STAGE_ORDER: GameStage[] = [
+  'initial',
+  'info_found',
+  'island_unavailable_found',
+  'returned_home',
+  'accessed',
+]
 
 async function postChat(body: ChatRequest): Promise<ChatResponse> {
   const response = await fetch('/api/chat', {
@@ -78,19 +89,37 @@ async function postAdvice(body: ChatRequest): Promise<AdviceResponse> {
   return data
 }
 
-function mergeCompletedConditionIds(
-  previous: string[],
-  incoming: string[],
-): string[] {
-  return [...new Set([...previous, ...incoming])]
+function addElapsedMinutes(currentElapsedMinutes: number, minutes: number): number {
+  return currentElapsedMinutes + minutes
+}
+
+function isTimedOut(elapsedMinutes: number): boolean {
+  return elapsedMinutes > TOTAL_LIMIT_MINUTES
+}
+
+function advanceStage(currentStage: GameStage): GameStage {
+  const currentIndex = STAGE_ORDER.indexOf(currentStage)
+  if (currentIndex < 0 || currentIndex === STAGE_ORDER.length - 1) {
+    return currentStage
+  }
+
+  return STAGE_ORDER[currentIndex + 1]
+}
+
+function formatRemainingTime(elapsedMinutes: number): string {
+  const remainingMinutes = Math.max(0, TOTAL_LIMIT_MINUTES - elapsedMinutes)
+  const hours = Math.floor(remainingMinutes / 60)
+  const minutes = remainingMinutes % 60
+
+  return `${hours}時間${minutes}分`
 }
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>('intro')
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [completedConditionIds, setCompletedConditionIds] = useState<string[]>(
-    [],
-  )
+  const [elapsedMinutes, setElapsedMinutes] = useState(0)
+  const [currentStage, setCurrentStage] = useState<GameStage>('initial')
+  const [endingKind, setEndingKind] = useState<EndingKind>(null)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(INITIAL_ERROR)
@@ -102,14 +131,15 @@ export default function App() {
   const canAsk = !isLoading && !isAdviceLoading && phase === 'chat'
 
   function startGame() {
-    setMessages([])
-    setCompletedConditionIds([])
+    setMessages([{ role: 'assistant', content: INITIAL_SCENE }])
+    setElapsedMinutes(0)
+    setCurrentStage('initial')
+    setEndingKind(null)
     setInput('')
     setError(INITIAL_ERROR)
     setIsLoading(false)
     setIsAdviceVisible(false)
     setPhase('chat')
-    setMessages([{ role: 'assistant', content: '1+1は？' }])
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -133,25 +163,34 @@ export default function App() {
       
       const response = await postChat({
         messages: nextMessages,
-        completedConditionIds,
+        elapsedMinutes,
+        currentStage,
       })
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: response.reply,
       }
-      const nextCompletedConditionIds = mergeCompletedConditionIds(
-        completedConditionIds,
-        response.newlyCompletedConditionIds,
+      const nextElapsedMinutes = addElapsedMinutes(
+        elapsedMinutes,
+        response.elapsedMinutes,
       )
+      const nextStage = response.shouldAdvanceStage
+        ? advanceStage(currentStage)
+        : currentStage
 
       setMessages((currentMessages) => [
         ...currentMessages.filter((message) => message.role !== 'advice'),
         assistantMessage,
       ])
-      setCompletedConditionIds(nextCompletedConditionIds)
+      setElapsedMinutes(nextElapsedMinutes)
+      setCurrentStage(nextStage)
 
-      if (response.didWin) {
+      if (nextStage === 'accessed') {
+        setEndingKind('accessed')
+        setPhase('ending')
+      } else if (isTimedOut(nextElapsedMinutes)) {
+        setEndingKind('timed_out')
         setPhase('ending')
       }
     } catch (caughtError) {
@@ -170,7 +209,9 @@ export default function App() {
   function resetGame() {
     setPhase('intro')
     setMessages([])
-    setCompletedConditionIds([])
+    setElapsedMinutes(0)
+    setCurrentStage('initial')
+    setEndingKind(null)
     setInput('')
     setIsLoading(false)
     setError(INITIAL_ERROR)
@@ -187,7 +228,8 @@ export default function App() {
     try {
       const { advice } = await postAdvice({
         messages: gameMessages,
-        completedConditionIds,
+        elapsedMinutes,
+        currentStage,
       })
       setMessages([
         ...gameMessages,
@@ -203,6 +245,10 @@ export default function App() {
       setIsAdviceLoading(false)
     }
   }
+
+  const endingTitle =
+    endingKind === 'accessed' ? SUCCESS_TITLE : FAILURE_TITLE
+  const endingCopy = endingKind === 'accessed' ? SUCCESS_COPY : FAILURE_COPY
 
   return (
     <main className="app-shell">
@@ -295,13 +341,13 @@ export default function App() {
                 id="player-input"
                 name="player-input"
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="あなたはどうする？"
+                placeholder="次に取る行動を入力"
                 rows={3}
                 value={input}
               />
               <div className="composer-footer">
                 <p className="meta">
-                  達成済み条件: {completedConditionIds.length}
+                  残り時間: {formatRemainingTime(elapsedMinutes)}
                 </p>
                 <div className="composer-footer-buttons">
                   <button
@@ -329,8 +375,8 @@ export default function App() {
 
         {phase === 'ending' ? (
           <div className="stack">
-            <h2 className="ending-text">{ENDING_HAPPY_TITLE}</h2>
-            <p className="lead">{ENDING_HAPPY_COPY}</p>
+            <p className="eyebrow">{endingTitle}</p>
+            <p className="lead">{endingCopy}</p>
             <button
               className="primary-button"
               onClick={resetGame}

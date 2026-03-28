@@ -1,9 +1,9 @@
-import type { ChatMessage, ChatResponse } from '../shared/chat'
+import type { ChatMessage, ChatResponse, GameStage } from '../shared/chat'
 import {
   ADVICE_SYSTEM_PROMPT,
   MODEL,
+  STAGE_CONFIGS,
   SYSTEM_PROMPT,
-  VICTORY_CONDITIONS,
 } from './gameConfig'
 
 type AiBinding = {
@@ -21,17 +21,23 @@ type AiBinding = {
   ) => Promise<unknown>
 }
 
+type RawChatResponse = {
+  reply: string
+  elapsedMinutes: number
+  shouldAdvanceStage: boolean
+}
+
 const RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
     reply: { type: 'string' },
-    newlyCompletedConditionIds: {
-      type: 'array',
-      items: { type: 'string' },
+    elapsedMinutes: {
+      type: 'integer',
+      enum: [30, 60, 180],
     },
-    didWin: { type: 'boolean' },
+    shouldAdvanceStage: { type: 'boolean' },
   },
-  required: ['reply', 'newlyCompletedConditionIds', 'didWin'],
+  required: ['reply', 'elapsedMinutes', 'shouldAdvanceStage'],
   additionalProperties: false,
 } as const
 
@@ -62,11 +68,11 @@ function getCurrentQuestion(completedConditionIds: string[]): string {
 
 function buildMessages(
   messages: ChatMessage[],
-  completedConditionIds: string[],
+  elapsedMinutes: number,
+  currentStage: GameStage,
 ): Array<{ role: 'system' | 'user' | 'assistant' | 'advice'; content: string }> {
-  const victoryConditionBlock = VICTORY_CONDITIONS.map(
-    (condition) => `- ${condition.id}: ${condition.description}`,
-  ).join('\n')
+  const remainingMinutes = Math.max(0, 72 * 60 - elapsedMinutes)
+  const isEvening = elapsedMinutes >= 4 * 60
 
   return [
     {
@@ -75,32 +81,34 @@ function buildMessages(
     },
     {
       role: 'system',
-      content: `勝利条件一覧:\n${victoryConditionBlock}`,
+      content: `開始からの経過時間: ${elapsedMinutes}分`,
     },
     {
       role: 'system',
-      content: `すでに達成済みの条件ID: ${
-        completedConditionIds.length > 0
-          ? completedConditionIds.join(', ')
-          : '(なし)'
-      }`,
+      content: `残り時間: ${remainingMinutes}分`,
     },
     {
       role: 'system',
-      content: `現在プレイヤーに答えさせるべき問題: ${getCurrentQuestion(
-        completedConditionIds,
-      )}`,
+      content: `夕方以降か: ${isEvening ? 'はい' : 'いいえ'}`,
+    },
+    {
+      role: 'system',
+      content: `現在のstage: ${currentStage} (${STAGE_CONFIGS[currentStage].description})`,
+    },
+    {
+      role: 'system',
+      content: `このターンで stage を進めてよい条件: ${STAGE_CONFIGS[currentStage].advanceRule}`,
     },
     {
       role: 'system',
       content:
-        '返答形式は {"reply": string, "newlyCompletedConditionIds": string[], "didWin": boolean} の JSON object のみです。',
+        '返答形式は {"reply": string, "elapsedMinutes": 30 | 60 | 180, "shouldAdvanceStage": boolean} の JSON object のみです。',
     },
     ...messages,
   ]
 }
 
-function isChatResponse(value: unknown): value is ChatResponse {
+function isRawChatResponse(value: unknown): value is RawChatResponse {
   if (typeof value !== 'object' || value === null) {
     return false
   }
@@ -108,27 +116,26 @@ function isChatResponse(value: unknown): value is ChatResponse {
   const candidate = value as Record<string, unknown>
   return (
     typeof candidate.reply === 'string' &&
-    typeof candidate.didWin === 'boolean' &&
-    Array.isArray(candidate.newlyCompletedConditionIds) &&
-    candidate.newlyCompletedConditionIds.every((id) => typeof id === 'string')
+    typeof candidate.elapsedMinutes === 'number' &&
+    typeof candidate.shouldAdvanceStage === 'boolean'
   )
 }
 
-function normalizeAiResponse(result: unknown): ChatResponse {
-  if (isChatResponse(result)) {
+function normalizeAiResponse(result: unknown): RawChatResponse {
+  if (isRawChatResponse(result)) {
     return result
   }
 
   if (typeof result === 'object' && result !== null && 'response' in result) {
     const response = (result as { response: unknown }).response
 
-    if (isChatResponse(response)) {
+    if (isRawChatResponse(response)) {
       return response
     }
 
     if (typeof response === 'string') {
       const parsed = JSON.parse(response) as unknown
-      if (isChatResponse(parsed)) {
+      if (isRawChatResponse(parsed)) {
         return parsed
       }
     }
@@ -136,7 +143,7 @@ function normalizeAiResponse(result: unknown): ChatResponse {
 
   if (typeof result === 'string') {
     const parsed = JSON.parse(result) as unknown
-    if (isChatResponse(parsed)) {
+    if (isRawChatResponse(parsed)) {
       return parsed
     }
   }
@@ -144,57 +151,76 @@ function normalizeAiResponse(result: unknown): ChatResponse {
   throw new Error('AI response shape is invalid')
 }
 
+function normalizeReply(
+  reply: string,
+  currentStage: GameStage,
+  shouldAdvanceStage: boolean,
+): string {
+  const trimmed = reply.trim()
+  if (!trimmed) {
+    return '状況はまだはっきりしません。不安が強まる中、どうしますか？'
+  }
+
+  const isAccessEnding = currentStage === 'returned_home' && shouldAdvanceStage
+  if (isAccessEnding || trimmed.endsWith('どうしますか？')) {
+    return trimmed
+  }
+
+  return `${trimmed} どうしますか？`
+}
+
 function sanitizeResponse(
-  response: ChatResponse,
-  completedConditionIds: string[],
+  response: RawChatResponse,
+  currentStage: GameStage,
 ): ChatResponse {
-  const validConditionIds = new Set<string>(
-    VICTORY_CONDITIONS.map((condition) => condition.id),
-  )
-  const alreadyCompleted = new Set(completedConditionIds)
-
-  const newlyCompletedConditionIds = response.newlyCompletedConditionIds.filter(
-    (conditionId) =>
-      validConditionIds.has(conditionId) && !alreadyCompleted.has(conditionId),
-  )
-
-  const allCompleted = new Set([...completedConditionIds, ...newlyCompletedConditionIds])
-  const didWin = VICTORY_CONDITIONS.every((condition) => allCompleted.has(condition.id))
+  const elapsedMinutes =
+    response.elapsedMinutes === 30 ||
+    response.elapsedMinutes === 60 ||
+    response.elapsedMinutes === 180
+      ? response.elapsedMinutes
+      : 30
 
   return {
-    reply: response.reply.trim(),
-    newlyCompletedConditionIds,
-    didWin,
+    reply: normalizeReply(
+      response.reply,
+      currentStage,
+      response.shouldAdvanceStage,
+    ),
+    elapsedMinutes,
+    shouldAdvanceStage:
+      currentStage === 'accessed' ? false : response.shouldAdvanceStage,
   }
 }
 
 async function invokeModel(
   ai: AiBinding,
   messages: ChatMessage[],
-  completedConditionIds: string[],
+  elapsedMinutes: number,
+  currentStage: GameStage,
 ): Promise<ChatResponse> {
   const gameMessages = withoutAdviceMessages(messages)
   const result = await ai.run(MODEL, {
-    messages: buildMessages(gameMessages, completedConditionIds),
+    messages: buildMessages(gameMessages, elapsedMinutes, currentStage),
     response_format: {
       type: 'json_schema',
       json_schema: RESPONSE_SCHEMA,
     },
-    max_tokens: 256,
+    max_tokens: 300,
     temperature: 0,
   })
 
   const normalized = normalizeAiResponse(result)
-  return sanitizeResponse(normalized, completedConditionIds)
+  return sanitizeResponse(normalized, currentStage)
 }
 
 export async function generateGameResponse(
   ai: AiBinding,
   messages: ChatMessage[],
-  completedConditionIds: string[],
+  elapsedMinutes: number,
+  currentStage: GameStage,
 ): Promise<ChatResponse> {
   try {
-    return await invokeModel(ai, messages, completedConditionIds)
+    return await invokeModel(ai, messages, elapsedMinutes, currentStage)
   } catch {
     const retryMessages = [
       ...withoutAdviceMessages(messages),
@@ -205,48 +231,12 @@ export async function generateGameResponse(
       },
     ]
 
-    return invokeModel(ai, retryMessages, completedConditionIds)
+    return invokeModel(ai, retryMessages, elapsedMinutes, currentStage)
   }
 }
 
-function isAdvicePayload(value: unknown): value is { advice: string } {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
 
-  const candidate = value as Record<string, unknown>
-  return typeof candidate.advice === 'string'
-}
 
-function normalizeAdviceResponse(result: unknown): string {
-  if (isAdvicePayload(result)) {
-    return result.advice.trim()
-  }
-
-  if (typeof result === 'object' && result !== null && 'response' in result) {
-    const response = (result as { response: unknown }).response
-
-    if (isAdvicePayload(response)) {
-      return response.advice.trim()
-    }
-
-    if (typeof response === 'string') {
-      const parsed = JSON.parse(response) as unknown
-      if (isAdvicePayload(parsed)) {
-        return parsed.advice.trim()
-      }
-    }
-  }
-
-  if (typeof result === 'string') {
-    const parsed = JSON.parse(result) as unknown
-    if (isAdvicePayload(parsed)) {
-      return parsed.advice.trim()
-    }
-  }
-
-  throw new Error('Advice response shape is invalid')
-}
 
 function buildAdviceMessages(
   messages: ChatMessage[],
@@ -293,3 +283,44 @@ export async function generateAdvice(ai: AiBinding, messages: ChatMessage[]): Pr
 
   return normalizeAdviceResponse(result)
 }
+
+function isAdvicePayload(value: unknown): value is { advice: string } {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Record<string, unknown>
+  return typeof candidate.advice === 'string'
+}
+
+function normalizeAdviceResponse(result: unknown): string {
+  if (isAdvicePayload(result)) {
+    return result.advice.trim()
+  }
+
+  if (typeof result === 'object' && result !== null && 'response' in result) {
+    const response = (result as { response: unknown }).response
+
+    if (isAdvicePayload(response)) {
+      return response.advice.trim()
+    }
+
+    if (typeof response === 'string') {
+      const parsed = JSON.parse(response) as unknown
+      if (isAdvicePayload(parsed)) {
+        return parsed.advice.trim()
+      }
+    }
+  }
+
+  if (typeof result === 'string') {
+    const parsed = JSON.parse(result) as unknown
+    if (isAdvicePayload(parsed)) {
+      return parsed.advice.trim()
+    }
+  }
+
+  throw new Error('Advice response shape is invalid')
+}
+
+

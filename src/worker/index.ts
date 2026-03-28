@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { ChatMessage, ChatRequest } from '../shared/chat'
+import type { ChatMessage, ChatRequest, GameStage } from '../shared/chat'
 import { generateAdvice, generateGameResponse } from './ai'
 
 type AiBinding = {
@@ -13,6 +13,13 @@ type AppEnv = {
 }
 
 const app = new Hono<AppEnv>()
+const VALID_STAGES: GameStage[] = [
+  'initial',
+  'info_found',
+  'island_unavailable_found',
+  'returned_home',
+  'accessed',
+]
 
 function isChatMessage(value: unknown): value is ChatMessage {
   if (typeof value !== 'object' || value === null) {
@@ -32,20 +39,24 @@ function parseChatRequest(value: unknown): ChatRequest | null {
   }
 
   const candidate = value as Record<string, unknown>
-  const { messages, completedConditionIds } = candidate
+  const { messages, elapsedMinutes, currentStage } = candidate
 
   if (
     !Array.isArray(messages) ||
     !messages.every((message) => isChatMessage(message)) ||
-    !Array.isArray(completedConditionIds) ||
-    !completedConditionIds.every((id) => typeof id === 'string')
+    typeof elapsedMinutes !== 'number' ||
+    !Number.isFinite(elapsedMinutes) ||
+    elapsedMinutes < 0 ||
+    typeof currentStage !== 'string' ||
+    !VALID_STAGES.includes(currentStage as GameStage)
   ) {
     return null
   }
 
   return {
     messages,
-    completedConditionIds,
+    elapsedMinutes,
+    currentStage: currentStage as GameStage,
   }
 }
 
@@ -61,7 +72,7 @@ app.post('/api/chat', async (c) => {
   const chatRequest = parseChatRequest(payload)
   if (!chatRequest) {
     return c.json(
-      { error: 'messages と completedConditionIds の形式が不正です。' },
+      { error: 'messages、elapsedMinutes、currentStage の形式が不正です。' },
       400,
     )
   }
@@ -70,7 +81,8 @@ app.post('/api/chat', async (c) => {
     const response = await generateGameResponse(
       c.env.AI,
       chatRequest.messages,
-      chatRequest.completedConditionIds,
+      chatRequest.elapsedMinutes,
+      chatRequest.currentStage,
     )
 
     return c.json(response)

@@ -18,21 +18,25 @@ export const INTRO_PERSONA_3 =
 
 さて、あなたはどうする？`
 
-export const INTRO_BUTTON_LABEL = 'ゲームを始める'
+export const INTRO_BUTTON_LABEL = '開始する'
 
-export const ENDING_HAPPY_TITLE = '72時間に間に合った!'
+export const SUCCESS_TITLE = '72時間に間に合った!'
 
-export const ENDING_HAPPY_COPY =
+export const SUCCESS_COPY =
   '72時間に間に合った! あなたは、緊急避妊薬を必要とする状況に対処することができました。'
 
-export const ENDING_SAD_TITLE = '72時間に間に合わなかった...'
+  export const FAILURE_TITLE = 'Time Over'
 
-export const ENDING_SAD_COPY =
-  '72時間に間に合わなかった... あなたは、緊急避妊薬を必要とする状況に対処することができませんでした。'
+  export const FAILURE_COPY =
+    '時間制限そのものが、判断や行動を追い込みます。間に合わなかったことも、この体験の一部です。'
 
-export const RESTART_BUTTON_LABEL = 'もう一度遊ぶ'
+export const RESTART_BUTTON_LABEL = '最初からやり直す'
 
-export const SEND_BUTTON_LABEL = '送信'
+export const SEND_BUTTON_LABEL = '行動する'
+
+export const INITIAL_SCENE = `2026年9月20日（日）13:00。伊豆大島。台風の影響で強い雨が降っている。
+
+旅行中のあなたは、避妊に失敗した可能性が高いことに気づく。帰りの船は欠航しているが、夕方には再開するかもしれないという話もある。不安が現実味を帯びてくる。どうしますか？`
 
 export const ASK_BUTTON_LABEL = 'アドバイスを求める'
 
