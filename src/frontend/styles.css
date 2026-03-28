@@ -61,6 +61,14 @@ h1 {
   margin-top: 24px;
 }
 
+.intro-video {
+  width: 100%;
+  max-height: min(50vh, 420px);
+  border: 1px solid #d4d4d8;
+  border-radius: 4px;
+  background: #0f172a;
+}
+
 .primary-button {
   width: fit-content;
   padding: 12px 18px;

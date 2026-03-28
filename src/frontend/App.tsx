@@ -10,8 +10,11 @@ import {
   INTRO_PERSONA,
   RESTART_BUTTON_LABEL,
   SEND_BUTTON_LABEL,
+  INTRO_PERSONA_2,
+  INTRO_PERSONA_3,
 } from './gameCopy'
 import type { ChatMessage, ChatRequest, ChatResponse } from '../shared/chat'
+import ooshimaVideo from './assets/ooshima.mp4'
 
 type Phase = 'intro' | 'chat' | 'ending'
 
@@ -130,10 +133,6 @@ export default function App() {
     setError(INITIAL_ERROR)
   }
 
-  const latestAssistantMessage =
-    [...messages].reverse().find((message) => message.role === 'assistant')
-      ?.content ?? ''
-
   return (
     <main className="app-shell">
       <section className="panel">
@@ -143,6 +142,19 @@ export default function App() {
           <div className="stack">
             <p className="lead">{INTRO_COPY}</p>
             <p className="lead">{INTRO_PERSONA}</p>
+            <video
+              autoPlay
+              className="intro-video"
+              controls
+              muted
+              playsInline
+              preload="metadata"
+              src={ooshimaVideo}
+            >
+              お使いのブラウザは動画の再生に対応していません。
+            </video>
+            <p className="lead">{INTRO_PERSONA_2}</p>
+            <p className="lead">{INTRO_PERSONA_3}</p>
             <button
               className="primary-button"
               disabled={isLoading}
