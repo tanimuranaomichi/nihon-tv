@@ -1,10 +1,13 @@
 import { FormEvent, useState } from 'react'
 import {
   APP_TITLE,
-  ENDING_COPY,
-  ENDING_TITLE,
+  ENDING_HAPPY_COPY,
+  ENDING_SAD_COPY,
+  ENDING_HAPPY_TITLE,
+  ENDING_SAD_TITLE,
   INTRO_BUTTON_LABEL,
   INTRO_COPY,
+  INTRO_PERSONA,
   RESTART_BUTTON_LABEL,
   SEND_BUTTON_LABEL,
 } from './gameCopy'
@@ -134,12 +137,12 @@ export default function App() {
   return (
     <main className="app-shell">
       <section className="panel">
-        <p className="eyebrow">Cloudflare Workers AI Demo</p>
         <h1>{APP_TITLE}</h1>
 
         {phase === 'intro' ? (
           <div className="stack">
             <p className="lead">{INTRO_COPY}</p>
+            <p className="lead">{INTRO_PERSONA}</p>
             <button
               className="primary-button"
               disabled={isLoading}
@@ -206,9 +209,8 @@ export default function App() {
 
         {phase === 'ending' ? (
           <div className="stack">
-            <p className="eyebrow">{ENDING_TITLE}</p>
-            <h2 className="ending-text">{latestAssistantMessage}</h2>
-            <p className="lead">{ENDING_COPY}</p>
+            <h2 className="ending-text">{ENDING_HAPPY_TITLE}</h2>
+            <p className="lead">{ENDING_HAPPY_COPY}</p>
             <button
               className="primary-button"
               onClick={resetGame}
@@ -218,6 +220,22 @@ export default function App() {
             </button>
           </div>
         ) : null}
+
+        {/* TODO: 失敗時のエンディングを追加 */}
+        {/* {phase === 'ending' ? (
+          <div className="stack">
+            <p className="eyebrow">{ENDING_SAD_TITLE}</p>
+            <h2 className="ending-text">{latestAssistantMessage}</h2>
+            <p className="lead">{ENDING_SAD_COPY}</p>
+            <button
+              className="primary-button"
+              onClick={resetGame}
+              type="button"
+            >
+              {RESTART_BUTTON_LABEL}
+            </button>
+          </div>
+        ) : null} */}
 
         {error ? <p className="error-banner">{error}</p> : null}
       </section>
