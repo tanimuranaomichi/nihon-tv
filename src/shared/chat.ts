@@ -1,5 +1,4 @@
-export type ChatRole = 'user' | 'assistant'
-
+export type ChatRole = 'user' | 'assistant' | 'advice'
 export type ChatMessage = {
   role: ChatRole
   content: string
@@ -22,4 +21,9 @@ export type ChatResponse = {
   reply: string
   elapsedMinutes: 30 | 60 | 180
   shouldAdvanceStage: boolean
+}
+
+/** `/api/advice` — GM の直近発言に対するプレイヤー向けヒント */
+export type AdviceResponse = {
+  advice: string
 }
