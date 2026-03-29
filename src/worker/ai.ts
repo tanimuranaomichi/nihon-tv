@@ -161,7 +161,7 @@ function normalizeReply(
     return '状況はまだはっきりしません。不安が強まる中、どうしますか？'
   }
 
-  const isAccessEnding = currentStage === 'returned_home' && shouldAdvanceStage
+  const isAccessEnding = currentStage === 'pill_perchased' && shouldAdvanceStage
   if (isAccessEnding || trimmed.endsWith('どうしますか？')) {
     return trimmed
   }

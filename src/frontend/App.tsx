@@ -34,8 +34,8 @@ const TOTAL_LIMIT_MINUTES = 72 * 60
 const STAGE_ORDER: GameStage[] = [
   'initial',
   'info_found',
-  'island_unavailable_found',
-  'returned_home',
+  'pharmacy_arrived',
+  'pill_perchased',
   'accessed',
 ]
 
