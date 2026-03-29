@@ -1,15 +1,24 @@
-export const APP_TITLE = 'Tiny Calculation Quest'
+export const APP_TITLE = '72時間のあいだに'
 
 export const INTRO_COPY =
-  '二問だけの小さな計算ゲームです。ゲームマスターの問いに答え、正しい順番で突破してください。'
+  '自由に行動を入力しながら、情報の不確かさと時間の圧力の中で進む短い体験型プロトタイプです。'
 
-export const INTRO_BUTTON_LABEL = 'ゲームを始める'
+export const INTRO_BUTTON_LABEL = '開始する'
 
-export const ENDING_TITLE = 'Victory'
+export const SUCCESS_TITLE = 'Accessed'
 
-export const ENDING_COPY =
-  '計算の門は開かれました。プロンプトと勝利条件を書き換えれば、ここを別の物語に差し替えられます。'
+export const SUCCESS_COPY =
+  'アクセスできたとしても、そこに辿り着くまでには地理、制度、時間、説明の負担が積み重なります。'
 
-export const RESTART_BUTTON_LABEL = 'もう一度遊ぶ'
+export const FAILURE_TITLE = 'Time Over'
 
-export const SEND_BUTTON_LABEL = '送信'
+export const FAILURE_COPY =
+  '時間制限そのものが、判断や行動を追い込みます。間に合わなかったことも、この体験の一部です。'
+
+export const RESTART_BUTTON_LABEL = '最初からやり直す'
+
+export const SEND_BUTTON_LABEL = '行動する'
+
+export const INITIAL_SCENE = `2026年9月20日（日）13:00。伊豆大島。台風の影響で強い雨が降っている。
+
+旅行中のあなたは、避妊に失敗した可能性が高いことに気づく。帰りの船は欠航しているが、夕方には再開するかもしれないという話もある。不安が現実味を帯びてくる。どうしますか？`

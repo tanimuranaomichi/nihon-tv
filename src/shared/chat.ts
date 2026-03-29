@@ -5,14 +5,21 @@ export type ChatMessage = {
   content: string
 }
 
+export type GameStage =
+  | 'initial'
+  | 'info_found'
+  | 'island_unavailable_found'
+  | 'returned_home'
+  | 'accessed'
+
 export type ChatRequest = {
   messages: ChatMessage[]
-  completedConditionIds: string[]
+  elapsedMinutes: number
+  currentStage: GameStage
 }
 
 export type ChatResponse = {
   reply: string
-  newlyCompletedConditionIds: string[]
-  didWin: boolean
+  elapsedMinutes: 30 | 60 | 180
+  shouldAdvanceStage: boolean
 }
-
