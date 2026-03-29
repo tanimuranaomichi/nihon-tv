@@ -61,14 +61,6 @@ h1 {
   margin-top: 24px;
 }
 
-.intro-video {
-  width: 100%;
-  max-height: min(50vh, 420px);
-  border: 1px solid #d4d4d8;
-  border-radius: 4px;
-  background: #0f172a;
-}
-
 .primary-button {
   width: fit-content;
   padding: 12px 18px;
@@ -112,32 +104,6 @@ h1 {
   font-size: 0.82rem;
 }
 
-.advice-log {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.advice-image {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  display: block;
-  width: 100px;
-  height: 100px;
-  object-fit: cover;
-}
-
-.advice-log-messages {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 12px;
-}
-
-.message.advice {
-  background: #f9fafb;
-}
-
 .composer {
   display: grid;
   gap: 12px;
@@ -157,11 +123,6 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.composer-footer-buttons {
-  display: flex;
-  gap: 12px;
 }
 
 .meta {

@@ -6,25 +6,17 @@ import {
   INITIAL_SCENE,
   INTRO_BUTTON_LABEL,
   INTRO_COPY,
-  INTRO_PERSONA,
   RESTART_BUTTON_LABEL,
   SEND_BUTTON_LABEL,
   SUCCESS_COPY,
   SUCCESS_TITLE,
-  INTRO_PERSONA_2,
-  INTRO_PERSONA_3,
-  ASK_BUTTON_LABEL,
-  ADVICE_ROLE_LABEL,
 } from './gameCopy'
 import type {
-  AdviceResponse,
   ChatMessage,
   ChatRequest,
   ChatResponse,
   GameStage,
 } from '../shared/chat'
-import ooshimaVideo from './assets/movie/ooshima.mp4'
-import sorajiro from './assets/img/sorajiro.png'
 
 type Phase = 'intro' | 'chat' | 'ending'
 type EndingKind = 'accessed' | 'timed_out' | null
@@ -58,31 +50,6 @@ async function postChat(body: ChatRequest): Promise<ChatResponse> {
       data && 'error' in data && typeof data.error === 'string'
         ? data.error
         : 'AI からの応答を取得できませんでした。'
-    throw new Error(message)
-  }
-
-  return data
-}
-
-async function postAdvice(body: ChatRequest): Promise<AdviceResponse> {
-  const response = await fetch('/api/advice', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-
-  const data = (await response.json().catch(() => null)) as
-    | AdviceResponse
-    | { error?: string }
-    | null
-
-  if (!response.ok || !data || !('advice' in data)) {
-    const message =
-      data && 'error' in data && typeof data.error === 'string'
-        ? data.error
-        : 'アドバイスを取得できませんでした。'
     throw new Error(message)
   }
 
@@ -123,12 +90,8 @@ export default function App() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(INITIAL_ERROR)
-  const [isAdviceVisible, setIsAdviceVisible] = useState(false)
-  const [isAdviceLoading, setIsAdviceLoading] = useState(false)
 
-  const canSend =
-    input.trim().length > 0 && !isLoading && !isAdviceLoading && phase === 'chat'
-  const canAsk = !isLoading && !isAdviceLoading && phase === 'chat'
+  const canSend = input.trim().length > 0 && !isLoading && phase === 'chat'
 
   function startGame() {
     setMessages([{ role: 'assistant', content: INITIAL_SCENE }])
@@ -138,7 +101,6 @@ export default function App() {
     setInput('')
     setError(INITIAL_ERROR)
     setIsLoading(false)
-    setIsAdviceVisible(false)
     setPhase('chat')
   }
 
@@ -159,8 +121,6 @@ export default function App() {
     setIsLoading(true)
 
     try {
-      setIsAdviceVisible(false)
-      
       const response = await postChat({
         messages: nextMessages,
         elapsedMinutes,
@@ -179,10 +139,7 @@ export default function App() {
         ? advanceStage(currentStage)
         : currentStage
 
-      setMessages((currentMessages) => [
-        ...currentMessages.filter((message) => message.role !== 'advice'),
-        assistantMessage,
-      ])
+      setMessages((currentMessages) => [...currentMessages, assistantMessage])
       setElapsedMinutes(nextElapsedMinutes)
       setCurrentStage(nextStage)
 
@@ -215,36 +172,11 @@ export default function App() {
     setInput('')
     setIsLoading(false)
     setError(INITIAL_ERROR)
-    setIsAdviceVisible(false)
   }
 
-  async function handleAskAdvice() {
-    setError(INITIAL_ERROR)
-    setIsAdviceVisible(true)
-    const gameMessages = messages.filter((message) => message.role !== 'advice')
-    setMessages(gameMessages)
-    setIsAdviceLoading(true)
-
-    try {
-      const { advice } = await postAdvice({
-        messages: gameMessages,
-        elapsedMinutes,
-        currentStage,
-      })
-      setMessages([
-        ...gameMessages,
-        { role: 'advice', content: advice },
-      ])
-    } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : 'アドバイスの取得に失敗しました。',
-      )
-    } finally {
-      setIsAdviceLoading(false)
-    }
-  }
+  const latestAssistantMessage =
+    [...messages].reverse().find((message) => message.role === 'assistant')
+      ?.content ?? ''
 
   const endingTitle =
     endingKind === 'accessed' ? SUCCESS_TITLE : FAILURE_TITLE
@@ -253,25 +185,12 @@ export default function App() {
   return (
     <main className="app-shell">
       <section className="panel">
+        <p className="eyebrow">Cloudflare Workers AI Demo</p>
         <h1>{APP_TITLE}</h1>
 
         {phase === 'intro' ? (
           <div className="stack">
             <p className="lead">{INTRO_COPY}</p>
-            <p className="lead">{INTRO_PERSONA}</p>
-            <video
-              autoPlay
-              className="intro-video"
-              controls
-              muted
-              playsInline
-              preload="metadata"
-              src={ooshimaVideo}
-            >
-              お使いのブラウザは動画の再生に対応していません。
-            </video>
-            <p className="lead">{INTRO_PERSONA_2}</p>
-            <p className="lead">{INTRO_PERSONA_3}</p>
             <button
               className="primary-button"
               disabled={isLoading}
@@ -288,19 +207,17 @@ export default function App() {
         {phase === 'chat' ? (
           <div className="stack">
             <div className="chat-log" aria-live="polite">
-              {messages
-                .filter((message) => message.role !== 'advice')
-                .map((message, index) => (
-                  <article
-                    key={`${message.role}-${index}`}
-                    className={`message ${message.role}`}
-                  >
-                    <p className="message-role">
-                      {message.role === 'assistant' ? 'GM' : 'Player'}
-                    </p>
-                    <p>{message.content}</p>
-                  </article>
-                ))}
+              {messages.map((message, index) => (
+                <article
+                  key={`${message.role}-${index}`}
+                  className={`message ${message.role}`}
+                >
+                  <p className="message-role">
+                    {message.role === 'assistant' ? 'GM' : 'Player'}
+                  </p>
+                  <p>{message.content}</p>
+                </article>
+              ))}
 
               {isLoading ? (
                 <article className="message assistant pending">
@@ -309,30 +226,7 @@ export default function App() {
                 </article>
               ) : null}
             </div>
-            {isAdviceVisible ? (
-              <div className="advice-log">
-                <img className="advice-image" src={sorajiro} alt="そらジロー" />
-                <div className="advice-log-messages">
-                  {isAdviceLoading ? (
-                    <article className="message advice pending">
-                      <p className="message-role">{ADVICE_ROLE_LABEL}</p>
-                      <p>考えています...</p>
-                    </article>
-                  ) : null}
-                  {messages
-                    .filter((message) => message.role === 'advice')
-                    .map((message, index) => (
-                      <article
-                        key={`advice-${index}`}
-                        className="message advice"
-                      >
-                        <p className="message-role">{ADVICE_ROLE_LABEL}</p>
-                        <p>{message.content}</p>
-                      </article>
-                    ))}
-                </div>
-              </div>
-            ) : null}
+
             <form className="composer" onSubmit={handleSubmit}>
               <label className="sr-only" htmlFor="player-input">
                 プレイヤー入力
@@ -349,25 +243,13 @@ export default function App() {
                 <p className="meta">
                   残り時間: {formatRemainingTime(elapsedMinutes)}
                 </p>
-                <div className="composer-footer-buttons">
-                  <button
-                    className="primary-button"
-                    disabled={!canAsk}
-                    onClick={() => {
-                      void handleAskAdvice()
-                    }}
-                    type="button"
-                  >
-                    {isAdviceLoading ? '生成中...' : ASK_BUTTON_LABEL}
-                  </button>
-                  <button
-                    className="primary-button"
-                    disabled={!canSend}
-                    type="submit"
-                  >
-                    {isLoading ? '送信中...' : SEND_BUTTON_LABEL}
-                  </button>
-                </div>
+                <button
+                  className="primary-button"
+                  disabled={!canSend}
+                  type="submit"
+                >
+                  {isLoading ? '送信中...' : SEND_BUTTON_LABEL}
+                </button>
               </div>
             </form>
           </div>
@@ -376,6 +258,7 @@ export default function App() {
         {phase === 'ending' ? (
           <div className="stack">
             <p className="eyebrow">{endingTitle}</p>
+            <h2 className="ending-text">{latestAssistantMessage}</h2>
             <p className="lead">{endingCopy}</p>
             <button
               className="primary-button"
@@ -386,22 +269,6 @@ export default function App() {
             </button>
           </div>
         ) : null}
-
-        {/* TODO: 失敗時のエンディングを追加 */}
-        {/* {phase === 'ending' ? (
-          <div className="stack">
-            <p className="eyebrow">{ENDING_SAD_TITLE}</p>
-            <h2 className="ending-text">{latestAssistantMessage}</h2>
-            <p className="lead">{ENDING_SAD_COPY}</p>
-            <button
-              className="primary-button"
-              onClick={resetGame}
-              type="button"
-            >
-              {RESTART_BUTTON_LABEL}
-            </button>
-          </div>
-        ) : null} */}
 
         {error ? <p className="error-banner">{error}</p> : null}
       </section>

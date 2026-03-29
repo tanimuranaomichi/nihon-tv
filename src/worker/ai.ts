@@ -1,6 +1,5 @@
 import type { ChatMessage, ChatResponse, GameStage } from '../shared/chat'
 import {
-  ADVICE_SYSTEM_PROMPT,
   MODEL,
   STAGE_CONFIGS,
   SYSTEM_PROMPT,
@@ -10,7 +9,7 @@ type AiBinding = {
   run: (
     model: string,
     options: {
-      messages: Array<{ role: 'system' | 'user' | 'assistant' | 'advice'; content: string }>
+      messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
       response_format?: {
         type: 'json_schema'
         json_schema: unknown
@@ -41,36 +40,11 @@ const RESPONSE_SCHEMA = {
   additionalProperties: false,
 } as const
 
-const ADVICE_RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: {
-    advice: { type: 'string' },
-  },
-  required: ['advice'],
-  additionalProperties: false,
-} as const
-
-function withoutAdviceMessages(messages: ChatMessage[]): ChatMessage[] {
-  return messages.filter((message) => message.role !== 'advice')
-}
-
-function getCurrentQuestion(completedConditionIds: string[]): string {
-  if (!completedConditionIds.includes('answer-first-question')) {
-    return '1+1は？'
-  }
-
-  if (!completedConditionIds.includes('answer-second-question')) {
-    return '2*3は？'
-  }
-
-  return 'すべての問題は完了しています。'
-}
-
 function buildMessages(
   messages: ChatMessage[],
   elapsedMinutes: number,
   currentStage: GameStage,
-): Array<{ role: 'system' | 'user' | 'assistant' | 'advice'; content: string }> {
+): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
   const remainingMinutes = Math.max(0, 72 * 60 - elapsedMinutes)
   const isEvening = elapsedMinutes >= 4 * 60
 
@@ -198,9 +172,8 @@ async function invokeModel(
   elapsedMinutes: number,
   currentStage: GameStage,
 ): Promise<ChatResponse> {
-  const gameMessages = withoutAdviceMessages(messages)
   const result = await ai.run(MODEL, {
-    messages: buildMessages(gameMessages, elapsedMinutes, currentStage),
+    messages: buildMessages(messages, elapsedMinutes, currentStage),
     response_format: {
       type: 'json_schema',
       json_schema: RESPONSE_SCHEMA,
@@ -223,7 +196,7 @@ export async function generateGameResponse(
     return await invokeModel(ai, messages, elapsedMinutes, currentStage)
   } catch {
     const retryMessages = [
-      ...withoutAdviceMessages(messages),
+      ...messages,
       {
         role: 'user' as const,
         content:
@@ -234,93 +207,3 @@ export async function generateGameResponse(
     return invokeModel(ai, retryMessages, elapsedMinutes, currentStage)
   }
 }
-
-
-
-
-function buildAdviceMessages(
-  messages: ChatMessage[],
-): Array<{ role: 'system' | 'user'; content: string }> {
-  const gameMessages = withoutAdviceMessages(messages)
-  const lastAssistant = [...gameMessages]
-    .reverse()
-    .find((message) => message.role === 'assistant')
-
-  if (!lastAssistant) {
-    throw new Error('GM の発言がありません。')
-  }
-
-  const transcript = gameMessages
-    .map((message) =>
-      message.role === 'user'
-        ? `プレイヤー: ${message.content}`
-        : `GM: ${message.content}`,
-    )
-    .join('\n')
-
-  return [
-    {
-      role: 'system',
-      content: ADVICE_SYSTEM_PROMPT,
-    },
-    {
-      role: 'user',
-      content: `これまでの会話:\n${transcript}\n\n直近の GM の発言（この発言に返答するヒントを出してください）:\n${lastAssistant.content}\n\n返答は {"advice":"..."} 形式の JSON object のみです。`,
-    },
-  ]
-}
-
-export async function generateAdvice(ai: AiBinding, messages: ChatMessage[]): Promise<string> {
-  const result = await ai.run(MODEL, {
-    messages: buildAdviceMessages(messages),
-    response_format: {
-      type: 'json_schema',
-      json_schema: ADVICE_RESPONSE_SCHEMA,
-    },
-    max_tokens: 256,
-    temperature: 0.4,
-  })
-
-  return normalizeAdviceResponse(result)
-}
-
-function isAdvicePayload(value: unknown): value is { advice: string } {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const candidate = value as Record<string, unknown>
-  return typeof candidate.advice === 'string'
-}
-
-function normalizeAdviceResponse(result: unknown): string {
-  if (isAdvicePayload(result)) {
-    return result.advice.trim()
-  }
-
-  if (typeof result === 'object' && result !== null && 'response' in result) {
-    const response = (result as { response: unknown }).response
-
-    if (isAdvicePayload(response)) {
-      return response.advice.trim()
-    }
-
-    if (typeof response === 'string') {
-      const parsed = JSON.parse(response) as unknown
-      if (isAdvicePayload(parsed)) {
-        return parsed.advice.trim()
-      }
-    }
-  }
-
-  if (typeof result === 'string') {
-    const parsed = JSON.parse(result) as unknown
-    if (isAdvicePayload(parsed)) {
-      return parsed.advice.trim()
-    }
-  }
-
-  throw new Error('Advice response shape is invalid')
-}
-
-
