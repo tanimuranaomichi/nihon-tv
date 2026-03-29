@@ -7,8 +7,8 @@ export type ChatMessage = {
 export type GameStage =
   | 'initial'
   | 'info_found'
-  | 'island_unavailable_found'
-  | 'returned_home'
+  | 'pharmacy_arrived'
+  | 'pill_perchased'
   | 'accessed'
 
 export type ChatRequest = {

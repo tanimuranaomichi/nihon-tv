@@ -16,8 +16,8 @@ const app = new Hono<AppEnv>()
 const VALID_STAGES: GameStage[] = [
   'initial',
   'info_found',
-  'island_unavailable_found',
-  'returned_home',
+  'pharmacy_arrived',
+  'pill_perchased',
   'accessed',
 ]
 
